@@ -1,0 +1,18 @@
+# Binaries
+oasis-formatter
+/bin/
+/dist/
+*.exe
+*.out
+
+# Frontend
+web/node_modules/
+web/dist/
+web/.vite/
+*.tsbuildinfo
+
+# Git & local state
+.git/
+.env
+.env.*
+.DS_Store
