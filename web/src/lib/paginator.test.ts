@@ -71,4 +71,15 @@ describe('paginateForKindleOasis', () => {
     expect(width).toBeCloseTo(OASIS_WIDTH_PT, 2)
     expect(height).toBeCloseTo(OASIS_HEIGHT_PT, 2)
   })
+
+  it('supports format-only mode (no translation) without adding empty translation blocks', () => {
+    const pairs = [
+      { index: 0, source: 'First paragraph without translation.', translation: '' },
+      { index: 1, source: 'Second paragraph without translation.', translation: '' },
+    ]
+    const pages = paginateForKindleOasis(pairs)
+    expect(pages.length).toBe(1)
+    expect(pages[0].blocks.length).toBe(2)
+    expect(pages[0].blocks.every((b) => b.kind === 'source')).toBe(true)
+  })
 })

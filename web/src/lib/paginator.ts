@@ -264,26 +264,31 @@ export function paginateForKindleOasis(
     }
 
     // 1. Place Source Paragraph (First Paragraph)
-    placeLinesWithOverflow(
-      pair.index,
-      'source',
-      srcLines,
-      typo.sourceFontSizePt,
-      srcLineHeightPt,
-      0,
-    )
+    if (srcLines.length > 0) {
+      placeLinesWithOverflow(
+        pair.index,
+        'source',
+        srcLines,
+        typo.sourceFontSizePt,
+        srcLineHeightPt,
+        0,
+      )
+    }
 
-    cursorY += typo.interParagraphGapPt
-
-    // 2. Place Translation Paragraph (Second Paragraph)
-    placeLinesWithOverflow(
-      pair.index,
-      'translation',
-      trLines,
-      typo.translationFontSizePt,
-      trLineHeightPt,
-      typo.translationIndentPt,
-    )
+    // 2. Place Translation Paragraph (Second Paragraph) only when present
+    if (trLines.length > 0) {
+      if (srcLines.length > 0) {
+        cursorY += typo.interParagraphGapPt
+      }
+      placeLinesWithOverflow(
+        pair.index,
+        'translation',
+        trLines,
+        typo.translationFontSizePt,
+        trLineHeightPt,
+        typo.translationIndentPt,
+      )
+    }
 
     cursorY += typo.pairGapPt
   }

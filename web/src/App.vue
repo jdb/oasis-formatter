@@ -6,6 +6,7 @@ import OasisPageGrid from './components/OasisPageGrid.vue'
 import {
   createBrowserTextMeasurer,
   paginateForKindleOasis,
+  type ParagraphPair,
 } from './lib/paginator'
 import { generateKindleOasisPDF, triggerPDFDownload } from './lib/pdfExporter'
 import { useTranslateSSE } from './lib/useTranslateSSE'
@@ -28,10 +29,12 @@ const defaultLanguages: LanguageOption[] = [
 ]
 
 const languages = ref<LanguageOption[]>(defaultLanguages)
+const rawText = ref<string>('')
+const translateEnabled = ref<boolean>(true)
 const targetLang = ref<string>('en')
 const sourceFontSizePt = ref<number>(11)
 const isExportingPdf = ref<boolean>(false)
-const lastSubmittedText = ref<string>('')
+const formatOnlyPairs = ref<ParagraphPair[]>([])
 
 const measurer = createBrowserTextMeasurer()
 
@@ -60,38 +63,88 @@ onMounted(async () => {
   }
 })
 
+function splitParagraphsLocal(text: string): ParagraphPair[] {
+  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim()
+  if (!normalized) return []
+  let blocks = normalized.split(/\n\s*\n+/)
+  if (blocks.length === 1 && normalized.includes('\n')) {
+    blocks = normalized.split('\n')
+  }
+  return blocks
+    .map((b) => b.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .map((source, index) => ({ index, source, translation: '' }))
+}
+
+const activePairs = computed(() =>
+  translateEnabled.value ? translatedPairs.value : formatOnlyPairs.value,
+)
+
+const activeTotalParagraphs = computed(() =>
+  translateEnabled.value ? totalParagraphs.value : formatOnlyPairs.value.length,
+)
+
 const typographyOpts = computed(() => ({
   sourceFontSizePt: sourceFontSizePt.value,
   translationFontSizePt: +(sourceFontSizePt.value - 1.0).toFixed(1),
 }))
 
 const oasisPages = computed(() =>
-  paginateForKindleOasis(translatedPairs.value, typographyOpts.value, measurer),
+  paginateForKindleOasis(activePairs.value, typographyOpts.value, measurer),
 )
 
-function handleTextSubmission(text: string) {
-  lastSubmittedText.value = text
-  startTranslationStream(text, targetLang.value, 160)
+function runProcessing() {
+  const text = rawText.value.trim()
+  if (!text) return
+  if (translateEnabled.value) {
+    formatOnlyPairs.value = []
+    startTranslationStream(text, targetLang.value, 160)
+  } else {
+    stopStream()
+    formatOnlyPairs.value = splitParagraphsLocal(text)
+  }
+}
+
+function handleTextDropped(text: string) {
+  rawText.value = text
+  runProcessing()
+}
+
+function handleTranslateToggle(enabled: boolean) {
+  translateEnabled.value = enabled
+  if (rawText.value.trim()) {
+    runProcessing()
+  }
 }
 
 function handleTargetLangChange(newLang: string) {
   targetLang.value = newLang
-  if (lastSubmittedText.value.trim()) {
-    startTranslationStream(lastSubmittedText.value, newLang, 160)
+  if (translateEnabled.value && rawText.value.trim()) {
+    runProcessing()
   }
+}
+
+function handleReset() {
+  rawText.value = ''
+  formatOnlyPairs.value = []
+  reset()
 }
 
 async function handleExportPDF() {
   if (oasisPages.value.length === 0) return
   isExportingPdf.value = true
   try {
+    const filename = translateEnabled.value
+      ? `oasis-bilingual-${languageInfo.value?.sourceLang || 'src'}-${targetLang.value}.pdf`
+      : 'oasis-formatted.pdf'
     const bytes = await generateKindleOasisPDF(oasisPages.value, typographyOpts.value, {
-      title: `Oasis Formatter (${languageInfo.value?.sourceLang?.toUpperCase() || ' AUTO'} → ${targetLang.value.toUpperCase()})`,
+      title: translateEnabled.value
+        ? `Oasis Formatter (${languageInfo.value?.sourceLang?.toUpperCase() || 'AUTO'} → ${targetLang.value.toUpperCase()})`
+        : 'Oasis Formatter',
       sourceLangName: languageInfo.value?.sourceLangName,
       targetLangName: languageInfo.value?.targetLangName,
     })
-    const srcSlug = languageInfo.value?.sourceLang || 'src'
-    triggerPDFDownload(bytes, `oasis-bilingual-${srcSlug}-${targetLang.value}.pdf`)
+    triggerPDFDownload(bytes, filename)
   } finally {
     isExportingPdf.value = false
   }
@@ -101,47 +154,44 @@ async function handleExportPDF() {
 <template>
   <div class="app-shell">
     <header class="top-header">
-      <div class="brand">
-        <span class="brand-icon">📖</span>
-        <div>
-          <h1 class="brand-title">Oasis Formatter</h1>
-          <p class="brand-tagline">
-            Bilingual paragraph-by-paragraph translator &amp; 1:1 Kindle Oasis (107.02 × 142.24 mm) PDF generator
-          </p>
-        </div>
-      </div>
+      <h1 class="brand-title">Oasis Formatter</h1>
     </header>
 
     <main class="main-content">
+      <DropZone
+        v-model="rawText"
+        @text-dropped="handleTextDropped"
+      />
+
       <LanguageBar
+        :has-text="rawText.trim().length > 0"
+        :translate-enabled="translateEnabled"
         :languages="languages"
         :target-lang="targetLang"
         :source-font-size-pt="sourceFontSizePt"
         :status="status"
         :language-info="languageInfo"
-        :translated-count="translatedPairs.length"
-        :total-paragraphs="totalParagraphs"
+        :translated-count="activePairs.length"
+        :total-paragraphs="activeTotalParagraphs"
         :page-count="oasisPages.length"
-        :is-exporting-pdf="isExportingPdf"
+        @update:translate-enabled="handleTranslateToggle"
         @update:target-lang="handleTargetLangChange"
         @update:source-font-size-pt="sourceFontSizePt = $event"
-        @export-pdf="handleExportPDF"
+        @run="runProcessing"
         @stop="stopStream"
-        @reset="reset"
+        @reset="handleReset"
       />
 
       <div v-if="errorMessage" class="error-banner">
         {{ errorMessage }}
       </div>
 
-      <DropZone
-        :is-busy="status === 'detecting' || status === 'translating'"
-        @submit-text="handleTextSubmission"
-      />
-
       <OasisPageGrid
         :pages="oasisPages"
         :status="status"
+        :translate-enabled="translateEnabled"
+        :is-exporting-pdf="isExportingPdf"
+        @export-pdf="handleExportPDF"
       />
     </main>
   </div>
@@ -164,50 +214,87 @@ body {
 }
 
 .app-shell {
-  max-width: 1280px;
+  max-width: 1120px;
   margin: 0 auto;
   padding: 1.5rem 1.25rem 3rem;
 }
 
 .top-header {
-  margin-bottom: 1.25rem;
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-}
-
-.brand-icon {
-  font-size: 2rem;
+  margin-bottom: 1rem;
 }
 
 .brand-title {
   margin: 0;
-  font-size: 1.45rem;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-}
-
-.brand-tagline {
-  margin: 0.15rem 0 0;
-  font-size: 0.88rem;
-  color: #5e5950;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1c1b18;
 }
 
 .main-content {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 1rem;
+}
+
+.step-card {
+  background: #ffffff;
+  border: 1px solid #e2dfd7;
+  border-radius: 10px;
+  padding: 1.15rem 1.25rem;
+}
+
+.step-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1c1b18;
+}
+
+.btn-primary {
+  padding: 0.48rem 0.95rem;
+  border-radius: 6px;
+  border: 1px solid #1c1b18;
+  background: #1c1b18;
+  color: #faf9f5;
+  font-family: inherit;
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #33312b;
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-subtle {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.45rem 0.85rem;
+  border-radius: 6px;
+  border: 1px solid #d6d2c8;
+  background: #faf9f5;
+  color: #1c1b18;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.btn-subtle:hover {
+  background: #f0ede5;
 }
 
 .error-banner {
-  padding: 0.75rem 1rem;
+  padding: 0.7rem 1rem;
   background: #fef2f2;
-  border: 1px solid #f87171;
+  border: 1px solid #e5b4b4;
   border-radius: 8px;
-  color: #991b1b;
+  color: #8b2626;
   font-size: 0.88rem;
 }
 </style>
