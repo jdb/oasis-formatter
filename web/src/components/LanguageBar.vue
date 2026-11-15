@@ -21,7 +21,7 @@ const emit = defineEmits<{
 <template>
   <section class="step-card">
     <div class="step-header">
-      <h2 class="step-title">2. Optional translation</h2>
+      <h2 class="step-title">2. Options</h2>
     </div>
 
     <div class="options-row">
