@@ -38,7 +38,21 @@ const marginH = DEFAULT_TYPOGRAPHY.marginHorizontalPt
   <section class="step-card">
     <div class="step-header">
       <div class="title-group">
-        <h2 class="step-title">3. Go</h2>
+        <button
+          type="button"
+          class="btn-primary btn-cta"
+          :disabled="!hasText || status === 'translating' || status === 'detecting'"
+          @click="emit('run')"
+        >
+          {{
+            status === 'translating' || status === 'detecting'
+              ? 'Formatting…'
+              : translateEnabled
+                ? 'Format, with translation'
+                : 'Format'
+          }}
+        </button>
+
         <span v-if="status === 'detecting'" class="status-text">Detecting language…</span>
         <span v-else-if="status === 'translating' && languageInfo" class="status-text">
           {{ languageInfo.sourceLangName }} → {{ languageInfo.targetLangName }}
@@ -54,15 +68,6 @@ const marginH = DEFAULT_TYPOGRAPHY.marginHorizontalPt
       </div>
 
       <div class="header-actions">
-        <button
-          type="button"
-          class="btn-primary"
-          :disabled="!hasText || status === 'translating' || status === 'detecting'"
-          @click="emit('run')"
-        >
-          {{ status === 'translating' || status === 'detecting' ? 'Running…' : 'Go' }}
-        </button>
-
         <button
           v-if="status === 'translating' || status === 'detecting'"
           type="button"
@@ -112,7 +117,7 @@ const marginH = DEFAULT_TYPOGRAPHY.marginHorizontalPt
     </div>
 
     <div v-if="pages.length === 0" class="empty-preview">
-      Click <strong>Go</strong> after dropping your document to preview the Kindle Oasis pages.
+      Preview pages will appear here.
     </div>
 
     <div v-else class="pages-grid">
@@ -199,8 +204,13 @@ const marginH = DEFAULT_TYPOGRAPHY.marginHorizontalPt
 .title-group {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   gap: 0.75rem;
+}
+
+.btn-cta {
+  padding: 0.55rem 1.15rem;
+  font-size: 0.94rem;
 }
 
 .status-text {
