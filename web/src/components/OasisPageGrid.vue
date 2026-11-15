@@ -89,6 +89,17 @@ const marginH = DEFAULT_TYPOGRAPHY.marginHorizontalPt
           {{ isExportingPdf ? 'Generating PDF…' : 'Download PDF' }}
         </button>
 
+        <a
+          v-if="pages.length > 0"
+          href="https://www.amazon.com/sendtokindle"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="btn-subtle btn-link"
+          title="Open Amazon Send to Kindle web uploader (drag & drop your downloaded PDF)"
+        >
+          Send to Kindle ↗
+        </a>
+
         <button
           type="button"
           class="btn-subtle"
@@ -238,6 +249,12 @@ const marginH = DEFAULT_TYPOGRAPHY.marginHorizontalPt
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
+}
+
+.btn-link {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
 }
 
 .stream-status-banner {
