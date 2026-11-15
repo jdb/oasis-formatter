@@ -10,6 +10,9 @@ const emit = defineEmits<{
 }>()
 
 const isDragging = ref(false)
+const urlInput = ref('')
+const isFetchingUrl = ref(false)
+const urlError = ref<string | null>(null)
 
 const samples = [
   {
@@ -67,6 +70,33 @@ async function onFileSelected(e: Event) {
     emit('update:modelValue', text)
   }
 }
+
+async function fetchFromUrl() {
+  const target = urlInput.value.trim()
+  if (!target || isFetchingUrl.value) return
+  isFetchingUrl.value = true
+  urlError.value = null
+  try {
+    const resp = await fetch('/api/fetch-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: target }),
+    })
+    const data = await resp.json().catch(() => ({}))
+    if (!resp.ok) {
+      throw new Error(data?.detail || data?.title || `Failed to load URL (${resp.status})`)
+    }
+    if (typeof data?.text === 'string' && data.text.trim()) {
+      emit('update:modelValue', data.text)
+    } else {
+      throw new Error('No readable text found at that URL')
+    }
+  } catch (err: any) {
+    urlError.value = err?.message || 'Could not load URL'
+  } finally {
+    isFetchingUrl.value = false
+  }
+}
 </script>
 
 <template>
@@ -84,6 +114,23 @@ async function onFileSelected(e: Event) {
         <input type="file" accept=".txt,.md,text/plain" hidden @change="onFileSelected" />
       </label>
     </div>
+
+    <form class="url-row" @submit.prevent="fetchFromUrl">
+      <input
+        v-model="urlInput"
+        type="url"
+        class="url-input"
+        placeholder="Or paste a URL to load text from (https://…)"
+      />
+      <button
+        type="submit"
+        class="btn-subtle"
+        :disabled="!urlInput.trim() || isFetchingUrl"
+      >
+        {{ isFetchingUrl ? 'Loading…' : 'Load URL' }}
+      </button>
+    </form>
+    <p v-if="urlError" class="url-error">{{ urlError }}</p>
 
     <textarea
       :value="modelValue"
@@ -120,6 +167,35 @@ async function onFileSelected(e: Event) {
   align-items: center;
   gap: 1rem;
   margin-bottom: 0.75rem;
+}
+
+.url-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+
+.url-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid #dedad0;
+  border-radius: 6px;
+  background: #fcfbf9;
+  font-family: inherit;
+  font-size: 0.9rem;
+  color: #1c1b18;
+}
+
+.url-input:focus {
+  outline: none;
+  border-color: #8c867a;
+}
+
+.url-error {
+  margin: -0.35rem 0 0.6rem;
+  font-size: 0.84rem;
+  color: #8b2626;
 }
 
 .text-input {

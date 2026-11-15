@@ -141,6 +141,24 @@ func NewHandler(provider translator.Provider, staticDir string) http.Handler {
 		return out, nil
 	})
 
+	huma.Register(humaAPI, huma.Operation{
+		OperationID: "fetch-url",
+		Method:      http.MethodPost,
+		Path:        "/api/fetch-url",
+		Summary:     "Fetch text or readable article content from a public URL",
+	}, func(ctx context.Context, input *struct {
+		Body FetchURLRequest
+	}) (*FetchURLOutput, error) {
+		text, ct, err := handleFetchURL(ctx, input.Body.URL)
+		if err != nil {
+			return nil, err
+		}
+		out := &FetchURLOutput{}
+		out.Body.Text = text
+		out.Body.ContentType = ct
+		return out, nil
+	})
+
 	// SSE Streaming endpoint: POST /api/translate/stream
 	mux.HandleFunc("POST /api/translate/stream", func(w http.ResponseWriter, r *http.Request) {
 		handleTranslateStream(w, r, provider)
@@ -149,7 +167,7 @@ func NewHandler(provider translator.Provider, staticDir string) http.Handler {
 	// Top-level router that separates API routes, OpenAPI routes, and SPA static assets.
 	root := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
-		if strings.HasPrefix(path, "/openapi") || path == "/api/health" || path == "/api/languages" || path == "/api/translate" || path == "/api/translate/stream" || strings.HasPrefix(path, "/api/docs") {
+		if strings.HasPrefix(path, "/openapi") || path == "/api/health" || path == "/api/languages" || path == "/api/translate" || path == "/api/translate/stream" || path == "/api/fetch-url" || strings.HasPrefix(path, "/api/docs") {
 			mux.ServeHTTP(w, r)
 			return
 		}

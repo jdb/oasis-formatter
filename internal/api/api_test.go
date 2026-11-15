@@ -100,3 +100,24 @@ func TestTranslateStreamSSE(t *testing.T) {
 		}
 	}
 }
+
+func TestFetchURLValidationAndHTMLExtraction(t *testing.T) {
+	h := NewHandler(&stubProvider{}, "")
+
+	// Reject loopback / private URLs
+	payload, _ := json.Marshal(FetchURLRequest{URL: "http://127.0.0.1:8080/api/health"})
+	req := httptest.NewRequest(http.MethodPost, "/api/fetch-url", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for loopback URL, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Verify HTML extraction preserves paragraphs and strips scripts
+	rawHTML := `<html><head><style>body{}</style></head><body><script>alert(1)</script><p>First paragraph.</p><p>Second &amp; final paragraph.</p></body></html>`
+	got := ExtractReadableText(rawHTML, "text/html; charset=utf-8")
+	if got != "First paragraph.\n\nSecond & final paragraph." {
+		t.Fatalf("unexpected extracted text: %q", got)
+	}
+}
