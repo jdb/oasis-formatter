@@ -164,10 +164,13 @@ func NewHandler(provider translator.Provider, staticDir string) http.Handler {
 		handleTranslateStream(w, r, provider)
 	})
 
+	// EPUB upload extraction endpoint: POST /api/extract-epub
+	mux.HandleFunc("POST /api/extract-epub", handleExtractEPUB)
+
 	// Top-level router that separates API routes, OpenAPI routes, and SPA static assets.
 	root := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
-		if strings.HasPrefix(path, "/openapi") || path == "/api/health" || path == "/api/languages" || path == "/api/translate" || path == "/api/translate/stream" || path == "/api/fetch-url" || strings.HasPrefix(path, "/api/docs") {
+		if strings.HasPrefix(path, "/openapi") || path == "/api/health" || path == "/api/languages" || path == "/api/translate" || path == "/api/translate/stream" || path == "/api/fetch-url" || path == "/api/extract-epub" || strings.HasPrefix(path, "/api/docs") {
 			mux.ServeHTTP(w, r)
 			return
 		}

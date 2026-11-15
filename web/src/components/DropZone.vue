@@ -11,8 +11,8 @@ const emit = defineEmits<{
 
 const isDragging = ref(false)
 const urlInput = ref('')
-const isFetchingUrl = ref(false)
-const urlError = ref<string | null>(null)
+const isLoadingInput = ref(false)
+const inputError = ref<string | null>(null)
 
 const samples = [
   {
@@ -44,15 +44,50 @@ function onDragLeave() {
   isDragging.value = false
 }
 
+async function handleFile(file: File) {
+  inputError.value = null
+  const isEpub =
+    file.name.toLowerCase().endsWith('.epub') ||
+    file.type === 'application/epub+zip'
+
+  if (!isEpub) {
+    const text = await file.text()
+    if (text.trim()) {
+      emit('update:modelValue', text)
+    }
+    return
+  }
+
+  isLoadingInput.value = true
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    const resp = await fetch('/api/extract-epub', {
+      method: 'POST',
+      body: formData,
+    })
+    const data = await resp.json().catch(() => ({}))
+    if (!resp.ok) {
+      throw new Error(data?.detail || data?.title || `Failed to read EPUB (${resp.status})`)
+    }
+    if (typeof data?.text === 'string' && data.text.trim()) {
+      emit('update:modelValue', data.text)
+    } else {
+      throw new Error('No readable text found in EPUB')
+    }
+  } catch (err: any) {
+    inputError.value = err?.message || 'Could not read EPUB file'
+  } finally {
+    isLoadingInput.value = false
+  }
+}
+
 async function onDrop(e: DragEvent) {
   e.preventDefault()
   isDragging.value = false
 
   if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
-    const text = await e.dataTransfer.files[0].text()
-    if (text.trim()) {
-      emit('update:modelValue', text)
-    }
+    await handleFile(e.dataTransfer.files[0])
     return
   }
 
@@ -65,17 +100,15 @@ async function onDrop(e: DragEvent) {
 async function onFileSelected(e: Event) {
   const input = e.target as HTMLInputElement
   if (!input.files || input.files.length === 0) return
-  const text = await input.files[0].text()
-  if (text.trim()) {
-    emit('update:modelValue', text)
-  }
+  await handleFile(input.files[0])
+  input.value = ''
 }
 
 async function fetchFromUrl() {
   const target = urlInput.value.trim()
-  if (!target || isFetchingUrl.value) return
-  isFetchingUrl.value = true
-  urlError.value = null
+  if (!target || isLoadingInput.value) return
+  isLoadingInput.value = true
+  inputError.value = null
   try {
     const resp = await fetch('/api/fetch-url', {
       method: 'POST',
@@ -92,9 +125,9 @@ async function fetchFromUrl() {
       throw new Error('No readable text found at that URL')
     }
   } catch (err: any) {
-    urlError.value = err?.message || 'Could not load URL'
+    inputError.value = err?.message || 'Could not load URL'
   } finally {
-    isFetchingUrl.value = false
+    isLoadingInput.value = false
   }
 }
 </script>
@@ -110,8 +143,14 @@ async function fetchFromUrl() {
     <div class="step-header">
       <h2 class="step-title">1. Drop the document</h2>
       <label class="btn-subtle">
-        <span>Choose .txt / .md</span>
-        <input type="file" accept=".txt,.md,text/plain" hidden @change="onFileSelected" />
+        <span>{{ isLoadingInput ? 'Reading…' : 'Choose .txt / .md / .epub' }}</span>
+        <input
+          type="file"
+          accept=".txt,.md,.epub,application/epub+zip,text/plain"
+          hidden
+          :disabled="isLoadingInput"
+          @change="onFileSelected"
+        />
       </label>
     </div>
 
@@ -125,18 +164,18 @@ async function fetchFromUrl() {
       <button
         type="submit"
         class="btn-subtle"
-        :disabled="!urlInput.trim() || isFetchingUrl"
+        :disabled="!urlInput.trim() || isLoadingInput"
       >
-        {{ isFetchingUrl ? 'Loading…' : 'Load URL' }}
+        {{ isLoadingInput ? 'Loading…' : 'Load URL' }}
       </button>
     </form>
-    <p v-if="urlError" class="url-error">{{ urlError }}</p>
+    <p v-if="inputError" class="url-error">{{ inputError }}</p>
 
     <textarea
       :value="modelValue"
       class="text-input"
       rows="4"
-      placeholder="Drop a .txt or .md file here, or paste your text…"
+      placeholder="Drop a .txt, .md, or .epub file here, or paste your text…"
       @input="emit('update:modelValue', ($event.target as HTMLTextAreaElement).value)"
     />
 

@@ -1,9 +1,11 @@
 package api
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -119,5 +121,86 @@ func TestFetchURLValidationAndHTMLExtraction(t *testing.T) {
 	got := ExtractReadableText(rawHTML, "text/html; charset=utf-8")
 	if got != "First paragraph.\n\nSecond & final paragraph." {
 		t.Fatalf("unexpected extracted text: %q", got)
+	}
+}
+
+func TestExtractEPUBEndpoint(t *testing.T) {
+	// Build a minimal valid EPUB archive in memory
+	var epubBuf bytes.Buffer
+	zw := zip.NewWriter(&epubBuf)
+
+	addFile := func(name, content string) {
+		f, err := zw.Create(name)
+		if err != nil {
+			t.Fatalf("zip create %s: %v", name, err)
+		}
+		if _, err := f.Write([]byte(content)); err != nil {
+			t.Fatalf("zip write %s: %v", name, err)
+		}
+	}
+
+	addFile("META-INF/container.xml", `<?xml version="1.0"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>`)
+
+	addFile("OEBPS/content.opf", `<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Sample Oasis Book</dc:title>
+  </metadata>
+  <manifest>
+    <item id="ch1" href="ch1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch2" href="ch2.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="ch1"/>
+    <itemref idref="ch2"/>
+  </spine>
+</package>`)
+
+	addFile("OEBPS/ch1.xhtml", `<html><body><p>Chapter One paragraph.</p></body></html>`)
+	addFile("OEBPS/ch2.xhtml", `<html><body><p>Chapter Two paragraph.</p></body></html>`)
+	if err := zw.Close(); err != nil {
+		t.Fatalf("zip close: %v", err)
+	}
+
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	fw, err := mw.CreateFormFile("file", "book.epub")
+	if err != nil {
+		t.Fatalf("create form file: %v", err)
+	}
+	_, _ = fw.Write(epubBuf.Bytes())
+	_ = mw.Close()
+
+	h := NewHandler(&stubProvider{}, "")
+	req := httptest.NewRequest(http.MethodPost, "/api/extract-epub", &body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		Text     string `json:"text"`
+		Title    string `json:"title"`
+		Chapters int    `json:"chapters"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if resp.Title != "Sample Oasis Book" {
+		t.Errorf("expected title 'Sample Oasis Book', got %q", resp.Title)
+	}
+	if resp.Chapters != 2 {
+		t.Errorf("expected 2 chapters, got %d", resp.Chapters)
+	}
+	if resp.Text != "Chapter One paragraph.\n\nChapter Two paragraph." {
+		t.Errorf("unexpected extracted epub text: %q", resp.Text)
 	}
 }
