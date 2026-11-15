@@ -97,7 +97,7 @@ const marginH = DEFAULT_TYPOGRAPHY.marginHorizontalPt
           class="btn-subtle btn-link"
           title="Open Amazon Send to Kindle web uploader (drag & drop your downloaded PDF)"
         >
-          Send to Kindle ↗
+          Open www.amazon.com/sendtokindle in a new tab
         </a>
 
         <button
