@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"html"
@@ -120,13 +121,28 @@ func handleFetchURL(ctx context.Context, rawURL string) (string, string, error) 
 		return "", "", huma.Error502BadGateway(fmt.Sprintf("remote server returned HTTP %d", resp.StatusCode))
 	}
 
-	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, 25<<20))
 	if err != nil {
 		return "", "", huma.Error502BadGateway("failed to read remote content")
 	}
 
 	contentType := resp.Header.Get("Content-Type")
-	text := ExtractReadableText(string(bodyBytes), contentType)
+	lowerCT := strings.ToLower(contentType)
+	lowerPath := strings.ToLower(parsed.Path)
+	isEPUB := strings.Contains(lowerCT, "epub") ||
+		strings.HasSuffix(lowerPath, ".epub") ||
+		(bytes.HasPrefix(bodyBytes, []byte("PK\x03\x04")) && bytes.Contains(bodyBytes[:min(len(bodyBytes), 512)], []byte("application/epub+zip")))
+
+	var text string
+	if isEPUB {
+		text, _, _, err = ExtractTextFromEPUB(bytes.NewReader(bodyBytes), int64(len(bodyBytes)))
+		if err != nil {
+			return "", "", huma.Error422UnprocessableEntity("failed to extract EPUB from URL: " + err.Error())
+		}
+	} else {
+		text = ExtractReadableText(string(bodyBytes), contentType)
+	}
+
 	if text == "" {
 		return "", "", huma.Error422UnprocessableEntity("no readable text found at that URL")
 	}
