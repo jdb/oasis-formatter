@@ -19,6 +19,8 @@ defineProps<{
   translatedCount: number
   totalParagraphs: number
   isExportingPdf: boolean
+  statusMessage?: string | null
+  isRateLimitPaused?: boolean
   marginHorizontalPt?: number
 }>()
 
@@ -104,6 +106,19 @@ const marginH = DEFAULT_TYPOGRAPHY.marginHorizontalPt
           Clear
         </button>
       </div>
+    </div>
+
+    <div
+      v-if="statusMessage"
+      class="stream-status-banner"
+      :class="{ 'is-paused': isRateLimitPaused }"
+      role="status"
+      aria-live="polite"
+    >
+      <p class="status-banner-text">{{ statusMessage }}</p>
+      <p v-if="isRateLimitPaused" class="status-banner-note">
+        No paragraphs will be skipped — translation pauses automatically during rate limits and resumes when ready.
+      </p>
     </div>
 
     <div v-if="showMoreInfo" class="more-info">
@@ -225,6 +240,39 @@ const marginH = DEFAULT_TYPOGRAPHY.marginHorizontalPt
   gap: 0.5rem;
 }
 
+.stream-status-banner {
+  margin-bottom: 1rem;
+  padding: 0.65rem 0.85rem;
+  background: #f7f5f0;
+  border: 1px solid #e2dfd7;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: #4a453e;
+}
+
+.stream-status-banner.is-paused {
+  background: #fcf7eb;
+  border-color: #e4cf9b;
+  color: #5a4618;
+}
+
+.status-banner-text {
+  margin: 0;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.status-banner-note {
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+  color: #6b665e;
+  line-height: 1.4;
+}
+
+.stream-status-banner.is-paused .status-banner-note {
+  color: #745d28;
+}
+
 .more-info {
   margin-bottom: 1rem;
   padding: 0.65rem 0.85rem;
@@ -261,6 +309,8 @@ const marginH = DEFAULT_TYPOGRAPHY.marginHorizontalPt
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+  content-visibility: auto;
+  contain-intrinsic-size: 380px 510px;
 }
 
 .page-caption {

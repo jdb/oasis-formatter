@@ -4,7 +4,9 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestSplitParagraphs(t *testing.T) {
@@ -62,5 +64,43 @@ func TestGTXProviderMock(t *testing.T) {
 	}
 	if res.TranslatedText != "For a long time I went to bed early." {
 		t.Fatalf("unexpected translation: %q", res.TranslatedText)
+	}
+}
+
+func TestGTXProviderBatchAndRetryOn429(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := calls.Add(1)
+		if n == 1 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[[["First translated.\n\n§§§1§§§\n\nSecond translated.","Erster.\n\n§§§1§§§\n\nZweiter.",null,null,1]],null,"de",null,null,null,0.99]`))
+	}))
+	defer srv.Close()
+
+	p := &GTXProvider{
+		Client:      srv.Client(),
+		BaseURL:     srv.URL,
+		BaseBackoff: 10 * time.Millisecond,
+		MaxBackoff:  50 * time.Millisecond,
+	}
+
+	var pausedEvents []StatusUpdate
+	results, err := p.TranslateBatch(context.Background(), []string{"Erster.", "Zweiter."}, "auto", "en", func(u StatusUpdate) {
+		pausedEvents = append(pausedEvents, u)
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(pausedEvents) != 1 || pausedEvents[0].State != "paused" {
+		t.Fatalf("expected 1 paused status event on 429 retry, got %+v", pausedEvents)
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+	if results[0].TranslatedText != "First translated." || results[1].TranslatedText != "Second translated." {
+		t.Fatalf("unexpected batch translations: %+v", results)
 	}
 }

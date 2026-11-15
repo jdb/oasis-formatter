@@ -44,6 +44,8 @@ const {
   translatedPairs,
   languageInfo,
   errorMessage,
+  statusMessage,
+  isRateLimitPaused,
   startTranslationStream,
   stopStream,
   reset,
@@ -162,6 +164,8 @@ async function handleExportPDF() {
         :translated-count="activePairs.length"
         :total-paragraphs="activeTotalParagraphs"
         :is-exporting-pdf="isExportingPdf"
+        :status-message="statusMessage"
+        :is-rate-limit-paused="isRateLimitPaused"
         @run="runProcessing"
         @stop="stopStream"
         @reset="handleReset"

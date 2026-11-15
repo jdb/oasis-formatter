@@ -11,6 +11,13 @@ export interface LanguageInfo {
   targetLangName: string
 }
 
+export interface BatchProgress {
+  batchIndex: number
+  totalBatches: number
+  completed: number
+  total: number
+}
+
 export function useTranslateSSE() {
   const status = ref<StreamStatus>('idle')
   const totalParagraphs = ref<number>(0)
@@ -18,6 +25,9 @@ export function useTranslateSSE() {
   const translatedPairs = ref<ParagraphPair[]>([])
   const languageInfo = ref<LanguageInfo | null>(null)
   const errorMessage = ref<string | null>(null)
+  const statusMessage = ref<string | null>(null)
+  const isRateLimitPaused = ref<boolean>(false)
+  const batchProgress = ref<BatchProgress | null>(null)
 
   let activeAbortController: AbortController | null = null
 
@@ -29,6 +39,8 @@ export function useTranslateSSE() {
     if (status.value === 'detecting' || status.value === 'translating') {
       status.value = 'completed'
     }
+    isRateLimitPaused.value = false
+    statusMessage.value = null
   }
 
   function reset() {
@@ -39,6 +51,9 @@ export function useTranslateSSE() {
     translatedPairs.value = []
     languageInfo.value = null
     errorMessage.value = null
+    statusMessage.value = null
+    isRateLimitPaused.value = false
+    batchProgress.value = null
   }
 
   async function startTranslationStream(
@@ -57,6 +72,9 @@ export function useTranslateSSE() {
     translatedPairs.value = []
     languageInfo.value = null
     errorMessage.value = null
+    statusMessage.value = null
+    isRateLimitPaused.value = false
+    batchProgress.value = null
 
     const controller = new AbortController()
     activeAbortController = controller
@@ -129,8 +147,18 @@ export function useTranslateSSE() {
               targetLangName: parsed.targetLangName,
             }
             status.value = 'translating'
+          } else if (eventName === 'status_update') {
+            statusMessage.value = parsed.message || null
+            isRateLimitPaused.value = parsed.state === 'paused'
+            batchProgress.value = {
+              batchIndex: parsed.batchIndex || 0,
+              totalBatches: parsed.totalBatches || 0,
+              completed: parsed.completed || 0,
+              total: parsed.total || 0,
+            }
           } else if (eventName === 'paragraph_translated') {
             status.value = 'translating'
+            isRateLimitPaused.value = false
             const pair: ParagraphPair = {
               index: parsed.index,
               source: parsed.source,
@@ -142,6 +170,8 @@ export function useTranslateSSE() {
             }
           } else if (eventName === 'done') {
             status.value = 'completed'
+            isRateLimitPaused.value = false
+            statusMessage.value = null
           } else if (eventName === 'paragraph_error') {
             errorMessage.value = parsed.message || 'Error translating paragraph'
           }
@@ -165,6 +195,9 @@ export function useTranslateSSE() {
     translatedPairs,
     languageInfo,
     errorMessage,
+    statusMessage,
+    isRateLimitPaused,
+    batchProgress,
     startTranslationStream,
     stopStream,
     reset,

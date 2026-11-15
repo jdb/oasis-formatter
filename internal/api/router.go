@@ -230,6 +230,10 @@ func handleTranslateStream(w http.ResponseWriter, r *http.Request, provider tran
 		delay = 2 * time.Second
 	}
 
+	// Clear write deadline on long-lived SSE connections so full-book translations never time out.
+	rc := http.NewResponseController(w)
+	_ = rc.SetWriteDeadline(time.Time{})
+
 	// Set SSE headers for Fly.io & Cloudflare unbuffered streaming
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache, no-transform")
@@ -255,52 +259,125 @@ func handleTranslateStream(w http.ResponseWriter, r *http.Request, provider tran
 	detectedCode := heurCode
 	detectedName := heurName
 	detectedConf := heurConf
+	languageEmitted := false
 
-	for i, srcText := range paragraphs {
+	// Group paragraphs into batches (up to 12 paragraphs or ~3200 chars per API call)
+	type batchRange struct {
+		start int
+		end   int
+	}
+	var batches []batchRange
+	const maxBatchParagraphs = 12
+	const maxBatchChars = 3200
+
+	for i := 0; i < len(paragraphs); {
+		j := i
+		charCount := 0
+		for j < len(paragraphs) && (j-i) < maxBatchParagraphs {
+			pLen := len(paragraphs[j])
+			if j > i && charCount+pLen > maxBatchChars {
+				break
+			}
+			charCount += pLen
+			j++
+		}
+		batches = append(batches, batchRange{start: i, end: j})
+		i = j
+	}
+
+	batchProvider, isBatchProvider := provider.(translator.BatchProvider)
+	emitStatus := func(state, message string, retryInSec, completed, batchIdx int) {
+		writeSSE(w, "status_update", map[string]any{
+			"state":        state,
+			"message":      message,
+			"retryInSec":   retryInSec,
+			"completed":    completed,
+			"total":        len(paragraphs),
+			"batchIndex":   batchIdx + 1,
+			"totalBatches": len(batches),
+		})
+		flusher.Flush()
+	}
+
+	for bIdx, br := range batches {
 		select {
 		case <-ctx.Done():
 			return
 		default:
 		}
 
-		res, err := provider.TranslateParagraph(ctx, srcText, "auto", targetLang)
+		emitStatus(
+			"translating",
+			fmt.Sprintf("Translating batch %d / %d (%d / %d paragraphs done)…", bIdx+1, len(batches), br.start, len(paragraphs)),
+			0,
+			br.start,
+			bIdx,
+		)
+
+		slice := paragraphs[br.start:br.end]
+		var results []translator.Result
+		var err error
+
+		if isBatchProvider {
+			results, err = batchProvider.TranslateBatch(ctx, slice, "auto", targetLang, func(u translator.StatusUpdate) {
+				emitStatus(u.State, u.Message, u.RetryInSec, br.start, bIdx)
+			})
+		} else {
+			results = make([]translator.Result, 0, len(slice))
+			for _, srcText := range slice {
+				var res translator.Result
+				res, err = provider.TranslateParagraph(ctx, srcText, "auto", targetLang)
+				if err != nil {
+					break
+				}
+				results = append(results, res)
+			}
+		}
+
 		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
 			writeSSE(w, "paragraph_error", map[string]any{
-				"index":   i,
+				"index":   br.start,
 				"message": err.Error(),
 			})
 			flusher.Flush()
-			continue
+			return
 		}
 
-		if i == 0 {
-			if res.SourceLang != "" {
-				detectedCode = res.SourceLang
-				detectedName = res.SourceLangName
-				detectedConf = res.Confidence
+		for offset, res := range results {
+			idx := br.start + offset
+			if !languageEmitted {
+				if res.SourceLang != "" {
+					detectedCode = res.SourceLang
+					detectedName = res.SourceLangName
+					detectedConf = res.Confidence
+				}
+				writeSSE(w, "language_detected", map[string]any{
+					"sourceLang":     detectedCode,
+					"sourceLangName": detectedName,
+					"confidence":     detectedConf,
+					"targetLang":     targetLang,
+					"targetLangName": targetLangName,
+				})
+				flusher.Flush()
+				languageEmitted = true
 			}
-			writeSSE(w, "language_detected", map[string]any{
+
+			writeSSE(w, "paragraph_translated", map[string]any{
+				"index":          idx,
+				"source":         slice[offset],
+				"translation":    res.TranslatedText,
 				"sourceLang":     detectedCode,
 				"sourceLangName": detectedName,
-				"confidence":     detectedConf,
 				"targetLang":     targetLang,
 				"targetLangName": targetLangName,
 			})
-			flusher.Flush()
 		}
-
-		writeSSE(w, "paragraph_translated", map[string]any{
-			"index":          i,
-			"source":         srcText,
-			"translation":    res.TranslatedText,
-			"sourceLang":     detectedCode,
-			"sourceLangName": detectedName,
-			"targetLang":     targetLang,
-			"targetLangName": targetLangName,
-		})
 		flusher.Flush()
 
-		if i < len(paragraphs)-1 && delay > 0 {
+		if bIdx < len(batches)-1 && delay > 0 {
 			select {
 			case <-ctx.Done():
 				return
