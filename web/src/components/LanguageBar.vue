@@ -5,14 +5,12 @@ export interface LanguageOption {
 }
 
 defineProps<{
-  translateEnabled: boolean
   languages: LanguageOption[]
   targetLang: string
   sourceFontSizePt: number
 }>()
 
 const emit = defineEmits<{
-  (e: 'update:translateEnabled', enabled: boolean): void
   (e: 'update:targetLang', code: string): void
   (e: 'update:sourceFontSizePt', size: number): void
 }>()
@@ -25,22 +23,14 @@ const emit = defineEmits<{
     </div>
 
     <div class="options-row">
-      <label class="checkbox-field">
-        <input
-          type="checkbox"
-          :checked="translateEnabled"
-          @change="emit('update:translateEnabled', ($event.target as HTMLInputElement).checked)"
-        />
-        <span>Translate paragraphs</span>
-      </label>
-
-      <label v-if="translateEnabled" class="field">
+      <label class="field">
         <span class="field-label">Destination language</span>
         <select
           class="select-input"
           :value="targetLang"
           @change="emit('update:targetLang', ($event.target as HTMLSelectElement).value)"
         >
+          <option value="">No translation</option>
           <option v-for="lang in languages" :key="lang.code" :value="lang.code">
             {{ lang.name }}
           </option>
@@ -75,16 +65,6 @@ const emit = defineEmits<{
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 1.5rem;
-}
-
-.checkbox-field {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  padding-bottom: 0.45rem;
-  font-size: 0.92rem;
-  color: #1c1b18;
-  cursor: pointer;
 }
 
 .field {

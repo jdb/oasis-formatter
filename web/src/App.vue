@@ -30,8 +30,8 @@ const defaultLanguages: LanguageOption[] = [
 
 const languages = ref<LanguageOption[]>(defaultLanguages)
 const rawText = ref<string>('')
-const translateEnabled = ref<boolean>(true)
-const targetLang = ref<string>('en')
+const targetLang = ref<string>('')
+const translateEnabled = computed(() => targetLang.value !== '')
 const sourceFontSizePt = ref<number>(11)
 const isExportingPdf = ref<boolean>(false)
 const formatOnlyPairs = ref<ParagraphPair[]>([])
@@ -142,11 +142,9 @@ async function handleExportPDF() {
       <DropZone v-model="rawText" />
 
       <LanguageBar
-        :translate-enabled="translateEnabled"
         :languages="languages"
         :target-lang="targetLang"
         :source-font-size-pt="sourceFontSizePt"
-        @update:translate-enabled="translateEnabled = $event"
         @update:target-lang="targetLang = $event"
         @update:source-font-size-pt="sourceFontSizePt = $event"
       />
