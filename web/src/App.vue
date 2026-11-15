@@ -105,25 +105,6 @@ function runProcessing() {
   }
 }
 
-function handleTextDropped(text: string) {
-  rawText.value = text
-  runProcessing()
-}
-
-function handleTranslateToggle(enabled: boolean) {
-  translateEnabled.value = enabled
-  if (rawText.value.trim()) {
-    runProcessing()
-  }
-}
-
-function handleTargetLangChange(newLang: string) {
-  targetLang.value = newLang
-  if (translateEnabled.value && rawText.value.trim()) {
-    runProcessing()
-  }
-}
-
 function handleReset() {
   rawText.value = ''
   formatOnlyPairs.value = []
@@ -158,28 +139,16 @@ async function handleExportPDF() {
     </header>
 
     <main class="main-content">
-      <DropZone
-        v-model="rawText"
-        @text-dropped="handleTextDropped"
-      />
+      <DropZone v-model="rawText" />
 
       <LanguageBar
-        :has-text="rawText.trim().length > 0"
         :translate-enabled="translateEnabled"
         :languages="languages"
         :target-lang="targetLang"
         :source-font-size-pt="sourceFontSizePt"
-        :status="status"
-        :language-info="languageInfo"
-        :translated-count="activePairs.length"
-        :total-paragraphs="activeTotalParagraphs"
-        :page-count="oasisPages.length"
-        @update:translate-enabled="handleTranslateToggle"
-        @update:target-lang="handleTargetLangChange"
+        @update:translate-enabled="translateEnabled = $event"
+        @update:target-lang="targetLang = $event"
         @update:source-font-size-pt="sourceFontSizePt = $event"
-        @run="runProcessing"
-        @stop="stopStream"
-        @reset="handleReset"
       />
 
       <div v-if="errorMessage" class="error-banner">
@@ -187,10 +156,17 @@ async function handleExportPDF() {
       </div>
 
       <OasisPageGrid
+        :has-text="rawText.trim().length > 0"
         :pages="oasisPages"
         :status="status"
         :translate-enabled="translateEnabled"
+        :language-info="languageInfo"
+        :translated-count="activePairs.length"
+        :total-paragraphs="activeTotalParagraphs"
         :is-exporting-pdf="isExportingPdf"
+        @run="runProcessing"
+        @stop="stopStream"
+        @reset="handleReset"
         @export-pdf="handleExportPDF"
       />
     </main>

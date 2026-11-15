@@ -7,7 +7,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'update:modelValue', text: string): void
-  (e: 'text-dropped', text: string): void
 }>()
 
 const isDragging = ref(false)
@@ -27,7 +26,7 @@ Sofort klopfte es und ein Mann, den er in dieser Wohnung noch niemals gesehen ha
   },
   {
     label: 'Spanish (Cervantes)',
-    text: `En un lugar de la Mancha, de cuyo nombre no quiero acordarme, no ha mucho tiempo que vivía un hidalgo de los de lanza en astillero, adarga antigua, rocín flaco y galgo corredor. Una olla de algo más vaca que carnero, salpicón las más noches, duelos y quebrantos los sábados, lantejas los viernes, algún palomino de añadura los domingos, consumían las tres partes de su hacienda.
+    text: `En un lugar de la Mancha, de cuyo nombre no quiero acordarme, no ha mucho tiempo que vivía un hidalgo de los de lanza en astillero, adarga antigua, rocín flaco y galgo corredor. Una olla de algo más vaca que carnero, salpicón las más noches, duelos y quebrantos los sábados, lantejas los viernes, algún palomino de añadidura los domingos, consumían las tres partes de su hacienda.
 
 El resto della concluían sayo de velarte, calzas de velludo para las fiestas, con sus pantuflos de lo mesmo, y los días de entresemana se honraba con su vellorí de lo más fino. Tenía en su casa una ama que pasaba de los cuarenta, y una sobrina que no llegaba a los veinte, y un mozo de campo y plaza, que así ensillaba el rocín como tomaba la podadera.`,
   },
@@ -50,7 +49,6 @@ async function onDrop(e: DragEvent) {
     const text = await e.dataTransfer.files[0].text()
     if (text.trim()) {
       emit('update:modelValue', text)
-      emit('text-dropped', text)
     }
     return
   }
@@ -58,7 +56,6 @@ async function onDrop(e: DragEvent) {
   const droppedText = e.dataTransfer?.getData('text/plain')
   if (droppedText && droppedText.trim()) {
     emit('update:modelValue', droppedText)
-    emit('text-dropped', droppedText)
   }
 }
 
@@ -68,22 +65,7 @@ async function onFileSelected(e: Event) {
   const text = await input.files[0].text()
   if (text.trim()) {
     emit('update:modelValue', text)
-    emit('text-dropped', text)
   }
-}
-
-function onPasteText(e: ClipboardEvent) {
-  const pasted = e.clipboardData?.getData('text/plain')
-  if (pasted && pasted.trim() && !props.modelValue.trim()) {
-    e.preventDefault()
-    emit('update:modelValue', pasted)
-    emit('text-dropped', pasted)
-  }
-}
-
-function loadSample(text: string) {
-  emit('update:modelValue', text)
-  emit('text-dropped', text)
 }
 </script>
 
@@ -109,7 +91,6 @@ function loadSample(text: string) {
       rows="4"
       placeholder="Drop a .txt or .md file here, or paste your text…"
       @input="emit('update:modelValue', ($event.target as HTMLTextAreaElement).value)"
-      @paste="onPasteText"
     />
 
     <div class="samples-row">
@@ -119,7 +100,7 @@ function loadSample(text: string) {
         :key="sample.label"
         type="button"
         class="btn-link"
-        @click="loadSample(sample.text)"
+        @click="emit('update:modelValue', sample.text)"
       >
         {{ sample.label }}
       </button>

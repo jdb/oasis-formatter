@@ -1,53 +1,27 @@
 <script setup lang="ts">
-import type { LanguageInfo, StreamStatus } from '../lib/useTranslateSSE'
-
 export interface LanguageOption {
   code: string
   name: string
 }
 
 defineProps<{
-  hasText: boolean
   translateEnabled: boolean
   languages: LanguageOption[]
   targetLang: string
   sourceFontSizePt: number
-  status: StreamStatus
-  languageInfo: LanguageInfo | null
-  translatedCount: number
-  totalParagraphs: number
-  pageCount: number
 }>()
 
 const emit = defineEmits<{
   (e: 'update:translateEnabled', enabled: boolean): void
   (e: 'update:targetLang', code: string): void
   (e: 'update:sourceFontSizePt', size: number): void
-  (e: 'run'): void
-  (e: 'stop'): void
-  (e: 'reset'): void
 }>()
 </script>
 
 <template>
   <section class="step-card">
     <div class="step-header">
-      <h2 class="step-title">2. Translation &amp; formatting</h2>
-
-      <div v-if="status === 'detecting' || status === 'translating'" class="status-text">
-        <span v-if="languageInfo">
-          {{ languageInfo.sourceLangName }} → {{ languageInfo.targetLangName }}
-          ({{ translatedCount }}/{{ totalParagraphs }})
-        </span>
-        <span v-else>Detecting language…</span>
-      </div>
-      <div v-else-if="translateEnabled && languageInfo && totalParagraphs > 0" class="status-text">
-        {{ languageInfo.sourceLangName }} → {{ languageInfo.targetLangName }}
-        ({{ translatedCount }} paragraphs, {{ pageCount }} {{ pageCount === 1 ? 'page' : 'pages' }})
-      </div>
-      <div v-else-if="!translateEnabled && pageCount > 0" class="status-text">
-        Format only ({{ totalParagraphs }} paragraphs, {{ pageCount }} {{ pageCount === 1 ? 'page' : 'pages' }})
-      </div>
+      <h2 class="step-title">2. Optional translation</h2>
     </div>
 
     <div class="options-row">
@@ -87,59 +61,20 @@ const emit = defineEmits<{
           <option :value="13">13 pt</option>
         </select>
       </label>
-
-      <div class="actions">
-        <button
-          v-if="status === 'translating' || status === 'detecting'"
-          type="button"
-          class="btn-subtle"
-          @click="emit('stop')"
-        >
-          Pause
-        </button>
-
-        <button
-          type="button"
-          class="btn-primary"
-          :disabled="!hasText || status === 'translating' || status === 'detecting'"
-          @click="emit('run')"
-        >
-          {{ translateEnabled ? 'Translate & format' : 'Format for Oasis' }}
-        </button>
-
-        <button
-          v-if="hasText || pageCount > 0"
-          type="button"
-          class="btn-subtle"
-          @click="emit('reset')"
-        >
-          Clear
-        </button>
-      </div>
     </div>
   </section>
 </template>
 
 <style scoped>
 .step-header {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.75rem;
   margin-bottom: 0.85rem;
-}
-
-.status-text {
-  font-size: 0.88rem;
-  color: #6b665e;
 }
 
 .options-row {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: 1.25rem;
+  gap: 1.5rem;
 }
 
 .checkbox-field {
@@ -172,12 +107,5 @@ const emit = defineEmits<{
   background: #fcfbf9;
   color: #1c1b18;
   cursor: pointer;
-}
-
-.actions {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-left: auto;
 }
 </style>

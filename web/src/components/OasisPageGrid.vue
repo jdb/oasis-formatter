@@ -8,17 +8,24 @@ import {
   OASIS_WIDTH_PT,
   type OasisPage,
 } from '../lib/paginator'
-import type { StreamStatus } from '../lib/useTranslateSSE'
+import type { LanguageInfo, StreamStatus } from '../lib/useTranslateSSE'
 
 defineProps<{
+  hasText: boolean
   pages: OasisPage[]
   status: StreamStatus
   translateEnabled: boolean
+  languageInfo: LanguageInfo | null
+  translatedCount: number
+  totalParagraphs: number
   isExportingPdf: boolean
   marginHorizontalPt?: number
 }>()
 
 const emit = defineEmits<{
+  (e: 'run'): void
+  (e: 'stop'): void
+  (e: 'reset'): void
   (e: 'export-pdf'): void
 }>()
 
@@ -30,9 +37,51 @@ const marginH = DEFAULT_TYPOGRAPHY.marginHorizontalPt
 <template>
   <section class="step-card">
     <div class="step-header">
-      <h2 class="step-title">3. Preview</h2>
+      <div class="title-group">
+        <h2 class="step-title">3. Go</h2>
+        <span v-if="status === 'detecting'" class="status-text">Detecting language…</span>
+        <span v-else-if="status === 'translating' && languageInfo" class="status-text">
+          {{ languageInfo.sourceLangName }} → {{ languageInfo.targetLangName }}
+          ({{ translatedCount }}/{{ totalParagraphs }})
+        </span>
+        <span v-else-if="translateEnabled && languageInfo && totalParagraphs > 0" class="status-text">
+          {{ languageInfo.sourceLangName }} → {{ languageInfo.targetLangName }}
+          ({{ translatedCount }} paragraphs, {{ pages.length }} {{ pages.length === 1 ? 'page' : 'pages' }})
+        </span>
+        <span v-else-if="!translateEnabled && pages.length > 0" class="status-text">
+          {{ totalParagraphs }} paragraphs, {{ pages.length }} {{ pages.length === 1 ? 'page' : 'pages' }}
+        </span>
+      </div>
 
       <div class="header-actions">
+        <button
+          type="button"
+          class="btn-primary"
+          :disabled="!hasText || status === 'translating' || status === 'detecting'"
+          @click="emit('run')"
+        >
+          {{ status === 'translating' || status === 'detecting' ? 'Running…' : 'Go' }}
+        </button>
+
+        <button
+          v-if="status === 'translating' || status === 'detecting'"
+          type="button"
+          class="btn-subtle"
+          @click="emit('stop')"
+        >
+          Pause
+        </button>
+
+        <button
+          v-if="pages.length > 0"
+          type="button"
+          class="btn-subtle"
+          :disabled="isExportingPdf"
+          @click="emit('export-pdf')"
+        >
+          {{ isExportingPdf ? 'Generating PDF…' : 'Download PDF' }}
+        </button>
+
         <button
           type="button"
           class="btn-subtle"
@@ -42,13 +91,12 @@ const marginH = DEFAULT_TYPOGRAPHY.marginHorizontalPt
         </button>
 
         <button
-          v-if="pages.length > 0"
+          v-if="hasText || pages.length > 0"
           type="button"
-          class="btn-primary"
-          :disabled="isExportingPdf"
-          @click="emit('export-pdf')"
+          class="btn-subtle"
+          @click="emit('reset')"
         >
-          {{ isExportingPdf ? 'Generating PDF…' : 'Download PDF' }}
+          Clear
         </button>
       </div>
     </div>
@@ -64,7 +112,7 @@ const marginH = DEFAULT_TYPOGRAPHY.marginHorizontalPt
     </div>
 
     <div v-if="pages.length === 0" class="empty-preview">
-      Pages will appear here as soon as you drop a document.
+      Click <strong>Go</strong> after dropping your document to preview the Kindle Oasis pages.
     </div>
 
     <div v-else class="pages-grid">
@@ -148,8 +196,21 @@ const marginH = DEFAULT_TYPOGRAPHY.marginHorizontalPt
   margin-bottom: 0.85rem;
 }
 
+.title-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.status-text {
+  font-size: 0.86rem;
+  color: #6b665e;
+}
+
 .header-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
 }
